@@ -5,6 +5,8 @@ from tkinter import ttk
 the following is a custom theme made for tkinter
 11/26/2022
                     ~ wissens
+
+the icon set was created by ___ and can be foun in here https://iconarchive.com/show/beautiful-flat-one-color-icons-by-elegantthemes.2.html
 """
 
 #COLOR PALET DEFINITION

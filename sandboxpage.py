@@ -28,10 +28,8 @@ WALL_COL = DARKBLUE
 
 UP = "U"
 RIGHT = "R"
-DOWN = "D"
+DOWN = "D"  
 LEFT = "L"
-
-#icon set: https://iconarchive.com/show/beautiful-flat-one-color-icons-by-elegantthemes.2.html
 
 class gridCellButton(tk.Button):
     def __init__(self, parent, controller, i, j):
@@ -40,6 +38,7 @@ class gridCellButton(tk.Button):
         cell_height = 7
         self.i = i
         self.j = j
+        self.parent = parent
         self.controller = controller
 
         settings = {
@@ -63,27 +62,27 @@ class gridCellButton(tk.Button):
             # self.configure(image=None)
         elif tool == "eraser":
             self.configure(background=WHITE)
-            if ((self.i, self.j) == self.controller.startCords):
-                self.controller.startCords = None
+            if ((self.i, self.j) == self.parent.startCords):
+                self.parent.startCords = None
 
-            if ((self.i, self.j) == self.controller.endCords):
-                self.controller.endCords = None
+            if ((self.i, self.j) == self.parent.endCords):
+                self.parent.endCords = None
             # self.configure(image=None)
         elif tool == "start":
             self.configure(background=START_COL)
 
-            previous_cords = self.controller.startCords
+            previous_cords = self.parent.startCords
             if previous_cords != None:
-                self.controller.mazeGrid[previous_cords[0]][previous_cords[1]].onClickCell("eraser")
-            self.controller.startCords = (self.i, self.j)
+                self.parent.gridMaze[previous_cords[0]][previous_cords[1]].onClickCell("eraser")
+            self.parent.startCords = (self.i, self.j)
             # self.configure(image=self.start_icon)
         elif tool == "end":
             self.configure(background=END_COL)
 
-            previous_cords = self.controller.endCords
+            previous_cords = self.parent.endCords
             if previous_cords != None:
-                self.controller.mazeGrid[previous_cords[0]][previous_cords[1]].onClickCell("eraser")
-            self.controller.endCords = (self.i, self.j)
+                self.parent.gridMaze[previous_cords[0]][previous_cords[1]].onClickCell("eraser")
+            self.parent.endCords = (self.i, self.j)
         else:
             print("Hey there, something went wrong!!!!")
 
@@ -103,6 +102,206 @@ class gridCellButton(tk.Button):
         if state == "unvisited_cell":
             self.configure(background=UNVISIT_CELL_COL)
 
+class Maze(tk.Frame):
+    def __init__(self, parent, width, height, controller):
+        super().__init__(parent)
+        self.controller = controller
+        self.parent = parent
+        self.gridWidth = width
+        self.gridHeight = height
+        self.gridMaze = []
+        self.startCords = None
+        self.endCords = None
+        self.createGrid()
+
+    # grid methods
+    def createGrid(self):
+        for i in range(self.gridWidth):
+            self.gridMaze.append([])
+            for j in range(self.gridHeight):
+                cell = gridCellButton(self, self.parent, i, j)
+                cell.grid(column=i, row=j, ipadx=0, ipady=0)
+                self.gridMaze[i].append(cell)
+
+    def destroyGrid(self):
+        for column in self.gridMaze:
+            for cell in column:
+                cell.destroy()
+
+        self.gridMaze = []
+
+    def clearGrid(self):
+        for row in self.gridMaze:
+            for cell in row:
+                cell.onClickCell("eraser")
+
+    #maze generation methods
+    def mattGrid(self):
+        cellsGrid = []
+        for i, column in enumerate(self.gridMaze):
+            cellsGrid.append([])
+            for j, cell in enumerate(column):
+                if i%2==0 and j%2==0:
+                    cell.changeState("unvisited_cell")
+                    cellsGrid[i].append({"grdiCords" : (i, j), "visited":False})
+                else:
+                    cell.onClickCell("wall")
+                    
+        return cellsGrid
+
+    def getUnvisitedNeightbours(self, current_i, current_j, cells):
+        neightbours = []
+
+        for direction in [UP, RIGHT, DOWN, LEFT]:
+            neightbours_i = current_i
+            neightbours_j = current_j
+            if direction == UP:
+                neightbours_j -= 1
+            if direction == DOWN:
+                neightbours_j += 1
+            if direction == RIGHT:
+                neightbours_i += 1
+            if direction == LEFT:
+                neightbours_i -= 1
+
+            if neightbours_i < 0 or neightbours_i >= len(cells[0]) or neightbours_j < 0 or neightbours_j >= len(cells):
+                continue
+
+            if cells[neightbours_i][neightbours_j]["visited"]:
+                continue
+
+            neightbours.append(cells[neightbours_i][neightbours_j])
+
+        return neightbours
+
+    def randomGeneration(self):
+        # self.clearGrid()
+        density = self.parent.scale.get()
+        for row in self.gridMaze:
+            for cell in row:
+                event = random.randint(0,99)
+                if event < density:
+                    cell.onClickCell("wall")
+                else:
+                    cell.onClickCell("eraser")
+
+    def recursiveBacktrackingGeneration(self, i=0, j=0):
+        cells = self.mattGrid()
+        cells[i][j]["visited"] = True
+        neightbours = self.getUnvisitedNeightbours(i, j, cells)
+
+    #path finding methods
+    def isSolutionPath(self, path):
+        cords = [self.startCords[0], self.startCords[1]]        
+
+        for step in path:
+            if step==UP:
+                cords[1] -= 1
+            if step==DOWN:
+                cords[1] += 1
+            if step==RIGHT:
+                cords[0] += 1
+            if step==LEFT:
+                cords[0] -= 1
+
+            if (cords[0], cords[1]) == self.endCords:
+                return True
+        
+        return False
+
+    def isValidPath(self, path):
+        cords = [self.startCords[0], self.startCords[1]] 
+        # previousCords = [self.startCords[0], self.startCords[1]] 
+
+        # try:
+        for step in path:
+            if step==UP:
+                cords[1] -= 1
+            if step==DOWN:
+                cords[1] += 1
+            if step==RIGHT:
+                cords[0] += 1
+            if step==LEFT:
+                cords[0] -= 1
+
+            #path goes out of grid
+            if(cords[0]<0 or cords[0]>=self.gridWidth or cords[1]<0 or cords[1]>=self.gridHeight):
+                return False
+
+            #path crosses wall
+            if (self.gridMaze[cords[0]][cords[1]].cget("background") == WALL_COL):
+                return False
+
+        #path has cicles
+        cell_state = self.gridMaze[cords[0]][cords[1]].cget("background")
+        if  cell_state == VISIT_CELL_COL or cell_state == START_COL:
+            return False
+
+        return True  
+
+    def renderPath(self, path):
+        cords = [self.startCords[0], self.startCords[1]]
+
+        for step in path:
+            if step==UP:
+                cords[1] -= 1
+            if step==DOWN:
+                cords[1] += 1
+            if step==RIGHT:
+                cords[0] += 1
+            if step==LEFT:
+                cords[0] -= 1
+
+            # self.after(500, lambda: self.gridMaze[cords[0]][cords[1]].changeState("path"))
+            self.gridMaze[cords[0]][cords[1]].configure(background=PATH_COL)
+            time.sleep(0.1)
+            self.update_idletasks()
+
+
+        self.endCords = None
+
+    def renderPosiblePath(self, path):
+        cords = [self.startCords[0], self.startCords[1]]
+
+        for step in path:
+            if step==UP:
+                cords[1] -= 1
+            if step==DOWN:
+                cords[1] += 1
+            if step==RIGHT:
+                cords[0] += 1
+            if step==LEFT:
+                cords[0] -= 1
+
+        cell = self.gridMaze[cords[0]][cords[1]]
+        if cell.cget("background") == VISIT_CELL_COL:
+            cell.changeState("visited_cell")
+        elif cell.cget("background") == WHITE:
+            cell.changeState("visit_cell")
+        else:
+            pass
+
+        time.sleep(0.01)
+        self.update()
+
+    def bfs(self):
+        paths = queue.Queue()
+        path = []
+        paths.put(path)
+        while(True):
+            path = paths.get()
+
+            if(self.isSolutionPath(path)):
+                return path
+
+            for direction in [UP, RIGHT, DOWN, LEFT]:
+                new_path = [step for step in path]
+                new_path.append(direction)
+                if self.isValidPath(new_path):
+                    paths.put(new_path)
+                    self.renderPosiblePath(new_path)
+            # time.sleep(0.01)
+
 class SettingsMenu(tk.Toplevel):
     def __init__(self, parent, controller:tk.Tk):
         super().__init__()
@@ -120,11 +319,11 @@ class SettingsMenu(tk.Toplevel):
         settings.pack(expand=1)
         
         self.heightScale = tk.Scale(settings, from_=5, to=40, troughcolor=DARKBLUE, highlightthickness=0)
-        self.heightScale.set(parent.grid_width)
+        self.heightScale.set(self.parent.maze.gridWidth)
         self.heightScale.grid(column=0, row=1)
 
         self.widthScale = tk.Scale(settings, from_=5, to=40, orient=tk.HORIZONTAL, troughcolor=DARKBLUE, highlightthickness=0)
-        self.widthScale.set(parent.grid_width)
+        self.widthScale.set(self.parent.maze.gridHeight)
         self.widthScale.grid(column=1, row=0)
 
         # self.gridImage = tk.PhotoImage("./assets/grid.png")
@@ -148,10 +347,10 @@ class SettingsMenu(tk.Toplevel):
     #     self.geometry(f"+{e.x_root}+{e.y_root}")
 
     def accept(self):
-        self.parent.grid_width = self.widthScale.get()
-        self.parent.grid_height = self.heightScale.get()
-        self.parent.destroyGrid()
-        self.parent.createGrid()
+        self.parent.maze.gridWidth = self.widthScale.get()
+        self.parent.maze.gridHeight = self.heightScale.get()
+        self.parent.maze.destroyGrid()
+        self.parent.maze.createGrid()
         self.destroy()
 
 class SandboxPage(tk.Frame):
@@ -161,14 +360,11 @@ class SandboxPage(tk.Frame):
 
         #CONTROL VARIABLES
         self.selectedTool = None
-        self.startCords = None
-        self.endCords = None
 
-        self.mazeGrid = []
-        self.grid_width = 10
-        self.grid_height = 10
+        self.defaultGridWidth = 10
+        self.defaultGridHeight = 10
 
-        #MENUBAR
+        #**MENUBAR**
         menubar = tk.Frame(self, background=DARKGRAY, padx=10, pady=10)
         menubar.pack(side="left", fill="both")
 
@@ -262,18 +458,18 @@ class SandboxPage(tk.Frame):
         configMenu.grid(column=0, row=1, padx=(5,5))
 
 
-        #MAZE GRID
-        self.mazegrid = tk.Canvas(self)
-        self.mazegrid.pack(expand=1) 
-        self.createGrid()
+        #**MAZE GRID**
+        self.maze = Maze(self, self.defaultGridWidth, self.defaultGridHeight, self.controller)
+        self.maze.pack(expand=1) 
 
-
-    # configuration mehtods
+    #**configuration mehtods**
+    #render with proper dimensions
     def configWindow(self):
         self.controller.geometry("900x700")
         self.controller.resizable(False, False)
-        # self.controller.eval('tk::PlaceWindow . center')
+        # maybe add logic to render in the center of the screen?
 
+    #initialize with default values
     def init(self):
         self.cbmazefin.current(0)
         self.cbmazegen.current(0)
@@ -281,231 +477,16 @@ class SandboxPage(tk.Frame):
         self.bgenerate.configure(state=tk.DISABLED)
         self.selectedTool = "cursor"
 
-    # grid methods
-    def createGrid(self):
-        for i in range(self.grid_width):
-            self.mazeGrid.append([])
-            for j in range(self.grid_height):
-                cell = gridCellButton(self.mazegrid, self, i, j)
-                cell.grid(column=i, row=j, ipadx=0, ipady=0)
-                self.mazeGrid[i].append(cell)
-
-    def destroyGrid(self):
-        for column in self.mazeGrid:
-            for cell in column:
-                cell.destroy()
-
-        self.mazeGrid = []
-
-    def clearGrid(self):
-        for row in self.mazeGrid:
-            for cell in row:
-                cell.onClickCell("eraser")
-
-    def mattGrid(self):
-        cellsGrid = []
-        for i, column in enumerate(self.mazeGrid):
-            cellsGrid.append([])
-            for j, cell in enumerate(column):
-                if i%2==0 and j%2==0:
-                    cell.changeState("unvisited_cell")
-                    cellsGrid[i].append({"grdiCords" : (i, j), "visited":False})
-                else:
-                    cell.onClickCell("wall")
-                    
-        return cellsGrid
-
-    def getUnvisitedNeightbours(self, current_i, current_j, cells):
-        neightbours = []
-
-        for direction in [UP, RIGHT, DOWN, LEFT]:
-            neightbours_i = current_i
-            neightbours_j = current_j
-            if direction == UP:
-                neightbours_j -= 1
-            if direction == DOWN:
-                neightbours_j += 1
-            if direction == RIGHT:
-                neightbours_i += 1
-            if direction == LEFT:
-                neightbours_i -= 1
-
-            if neightbours_i < 0 or neightbours_i >= len(cells[0]) or neightbours_j < 0 or neightbours_j >= len(cells):
-                continue
-
-            if cells[neightbours_i][neightbours_j]["visited"]:
-                continue
-
-            neightbours.append(cells[neightbours_i][neightbours_j])
-
-        return neightbours
-
-    #maze generation methods
-    def randomGeneration(self):
-        # self.clearGrid()
-        density = self.scale.get()
-        for row in self.mazeGrid:
-            for cell in row:
-                event = random.randint(0,99)
-                if event < density:
-                    cell.onClickCell("wall")
-                else:
-                    cell.onClickCell("eraser")
-
-    def recursiveBacktrackingGeneration(self, i=0, j=0):
-        cells = self.mattGrid()
-        cells[i][j]["visited"] = True
-        neightbours = self.getUnvisitedNeightbours(i, j, cells)
-        
-    def generateMaze(self):
-        selection = self.cbmazegen.get()
-        self.startCords = None
-        self.endCords = None
-
-        if selection == "Random":
-            self.randomGeneration()
-        elif selection == "Recursive Backtracking":
-            self.recursiveBacktrackingGeneration()
-        else:
-            pass
-
-    #path finding methods
-    def isSolutionPath(self, path):
-        cords = [self.startCords[0], self.startCords[1]]        
-
-        for step in path:
-            if step==UP:
-                cords[1] -= 1
-            if step==DOWN:
-                cords[1] += 1
-            if step==RIGHT:
-                cords[0] += 1
-            if step==LEFT:
-                cords[0] -= 1
-
-            if (cords[0], cords[1]) == self.endCords:
-                return True
-        
-        return False
-
-    def isValidPath(self, path):
-        cords = [self.startCords[0], self.startCords[1]] 
-        visitedCells = []
-        # previousCords = [self.startCords[0], self.startCords[1]] 
-
-        # try:
-        for step in path:
-            if step==UP:
-                cords[1] -= 1
-            if step==DOWN:
-                cords[1] += 1
-            if step==RIGHT:
-                cords[0] += 1
-            if step==LEFT:
-                cords[0] -= 1
-
-            #path goes out of grid
-            if(cords[0]<0 or cords[0]>=self.grid_width or cords[1]<0 or cords[1]>=self.grid_height):
-                return False
-
-            #path crosses wall
-            if (self.mazeGrid[cords[0]][cords[1]].cget("background") == WALL_COL):
-                return False
-
-            #path goes backwards
-            # if (cords==previousCords):
-            #     return False
-
-            for cell in visitedCells:
-                if cell == self.mazeGrid[cords[0]][cords[1]]:
-                    return False
-
-                if cell.cget("background") == START_COL:
-                    return False
-
-            visitedCells.append(self.mazeGrid[cords[0]][cords[1]])
-
-            # previousCords = [cords[0], cords[1]]
-
-        # except: #path goes out of bounds
-        #     return False     
-
-        return True  
-
-    def renderPath(self, path):
-        cords = [self.startCords[0], self.startCords[1]]
-
-        for step in path:
-            if step==UP:
-                cords[1] -= 1
-            if step==DOWN:
-                cords[1] += 1
-            if step==RIGHT:
-                cords[0] += 1
-            if step==LEFT:
-                cords[0] -= 1
-
-            # self.after(500, lambda: self.mazeGrid[cords[0]][cords[1]].changeState("path"))
-            self.mazeGrid[cords[0]][cords[1]].configure(background=PATH_COL)
-            time.sleep(0.1)
-            self.update_idletasks()
-
-
-        self.endCords = None
-
-    def renderPosiblePath(self, path):
-        cords = [self.startCords[0], self.startCords[1]]
-
-        for step in path:
-            if step==UP:
-                cords[1] -= 1
-            if step==DOWN:
-                cords[1] += 1
-            if step==RIGHT:
-                cords[0] += 1
-            if step==LEFT:
-                cords[0] -= 1
-
-        cell = self.mazeGrid[cords[0]][cords[1]]
-        if cell.cget("background") == VISIT_CELL_COL:
-            cell.changeState("visited_cell")
-        elif cell.cget("background") == WHITE:
-            cell.changeState("visit_cell")
-        else:
-            pass
-
-        time.sleep(0.01)
-        self.update()
-
-    def bfs(self):
-        paths = queue.Queue()
-        path = []
-        paths.put(path)
-        while(True):
-            path = paths.get()
-
-            if(self.isSolutionPath(path)):
-                return path
-
-            for direction in [UP, RIGHT, DOWN, LEFT]:
-                new_path = [step for step in path]
-                new_path.append(direction)
-                if self.isValidPath(new_path):
-                    paths.put(new_path)
-                    self.renderPosiblePath(new_path)
-            # time.sleep(0.01)
-            
-    def findPath(self):
-        selection = self.cbmazefin.get()
-
-        if selection == "Breath First Search":
-            path = self.bfs()
-            self.renderPath(path)
-
-    #menubar methods
+    #**menubar methods**
+    #tool selection
     def selectTool(self, tool):
         self.selectedTool = tool
 
+    #settings menu
+    def settingsMenu(self):
+        SettingsMenu(self, self.controller)
+
+    #maze generation controlls 
     def onSelectionChangedMazeGen(self, event):
         selection = self.cbmazegen.get()
 
@@ -545,6 +526,19 @@ class SandboxPage(tk.Frame):
             self.scale.set(42)
             self.scale.grid(column=1, row=0, sticky="NSWE")
 
+    def generateMaze(self):
+        selection = self.cbmazegen.get()
+        self.maze.startCords = None
+        self.maze.endCords = None
+
+        if selection == "Random":
+            self.maze.randomGeneration()
+        elif selection == "Recursive Backtracking":
+            self.recursiveBacktrackingGeneration()
+        else:
+            pass
+
+    #path finding controlls
     def onSelectionChangedPathfin(self, event):
         selection = self.cbmazefin.get()
 
@@ -557,5 +551,9 @@ class SandboxPage(tk.Frame):
             print("Error Unhandle selection event for path finding combobox")
             return
 
-    def settingsMenu(self):
-        SettingsMenu(self, self.controller)
+    def findPath(self):
+        selection = self.cbmazefin.get()
+
+        if selection == "Breath First Search":
+            path = self.maze.bfs()
+            self.maze.renderPath(path)
