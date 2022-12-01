@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import random
 import queue
 import time
@@ -23,7 +23,7 @@ END_COL = GREEN
 PATH_COL = GOLDEN
 VISITED_CELL_COL = LIGHTBLUE
 VISIT_CELL_COL = DIMBLUE
-UNVISIT_CELL_COL = LIGHTRED
+UNVISIT_CELL_COL = "#215d9b"
 WALL_COL = DARKBLUE
 
 UP = "U"
@@ -135,19 +135,26 @@ class Maze(tk.Frame):
             for cell in row:
                 cell.onClickCell("eraser")
 
+    def clearPath(self):
+        for row in self.gridMaze:
+            for cell in row:
+                if (cell.cget("background")==VISIT_CELL_COL or cell.cget("background")==PATH_COL):
+                    cell.onClickCell("eraser")
+
     #maze generation methods
     def mattGrid(self):
-        cellsGrid = []
+        cellsMattGrid = []
         for i, column in enumerate(self.gridMaze):
-            cellsGrid.append([])
+            if i%2==0 or i==0:
+                cellsMattGrid.append([])
             for j, cell in enumerate(column):
-                if i%2==0 and j%2==0:
+                if  (j%2==0 or j==0) and (i%2==0 or i==0):
                     cell.changeState("unvisited_cell")
-                    cellsGrid[i].append({"grdiCords" : (i, j), "visited":False})
+                    cellsMattGrid[i//2].append((cell, i, j))
                 else:
                     cell.onClickCell("wall")
-                    
-        return cellsGrid
+        self.update()       
+        return cellsMattGrid
 
     def getUnvisitedNeightbours(self, current_i, current_j, cells):
         neightbours = []
@@ -167,12 +174,61 @@ class Maze(tk.Frame):
             if neightbours_i < 0 or neightbours_i >= len(cells[0]) or neightbours_j < 0 or neightbours_j >= len(cells):
                 continue
 
-            if cells[neightbours_i][neightbours_j]["visited"]:
+            neightbourCell = cells[neightbours_i][neightbours_j][0]
+            if neightbourCell.cget("background") == VISITED_CELL_COL or neightbourCell.cget("background") == WHITE:
+                self.update()
                 continue
 
-            neightbours.append(cells[neightbours_i][neightbours_j])
+            neightbours.append((neightbours_i, neightbours_j))
 
         return neightbours
+
+    def paintBetweenWall(self, i, j, new_i, new_j, cells, color):
+        real_i = cells[i][j][1]
+        real_j = cells[i][j][2]
+
+        real_ni = cells[new_i][new_j][1]
+        real_nj = cells[new_i][new_j][2]
+
+        wall_i = real_i
+        wall_j = real_j
+
+        if real_i<real_ni:
+            wall_i += 1
+        if real_i>real_ni:
+            wall_i-=1
+        if real_j<real_nj:
+            wall_j += 1
+        if  real_j>real_nj:
+            wall_j -= 1
+
+        self.gridMaze[wall_i][wall_j].configure(background=color)
+        time.sleep(0.05)
+        self.update()
+
+    def recursiveBacktracking(self, i, j, cells):
+        currentCell = cells[i][j][0]
+        currentCell.configure(background = VISITED_CELL_COL)
+        self.update()
+
+        for k in range(4):
+            neightbours = self.getUnvisitedNeightbours(i, j, cells)
+
+            if not(neightbours):
+                currentCell.configure(background=WHITE)
+                self.update()
+                return
+
+            neightbour = neightbours[random.randint(0, len(neightbours)-1)]
+            new_i = neightbour[0]
+            new_j = neightbour[1]
+            self.paintBetweenWall(i, j, new_i, new_j, cells, VISITED_CELL_COL)
+            self.recursiveBacktracking(new_i, new_j, cells)
+            self.paintBetweenWall(i, j, new_i, new_j, cells, WHITE)
+
+    def recursiveBacktrackingGeneration(self):
+        cells = self.mattGrid()
+        self.recursiveBacktracking(0, 0, cells)
 
     def randomGeneration(self):
         # self.clearGrid()
@@ -184,11 +240,6 @@ class Maze(tk.Frame):
                     cell.onClickCell("wall")
                 else:
                     cell.onClickCell("eraser")
-
-    def recursiveBacktrackingGeneration(self, i=0, j=0):
-        cells = self.mattGrid()
-        cells[i][j]["visited"] = True
-        neightbours = self.getUnvisitedNeightbours(i, j, cells)
 
     #path finding methods
     def isSolutionPath(self, path):
@@ -255,9 +306,10 @@ class Maze(tk.Frame):
             # self.after(500, lambda: self.gridMaze[cords[0]][cords[1]].changeState("path"))
             self.gridMaze[cords[0]][cords[1]].configure(background=PATH_COL)
             time.sleep(0.1)
-            self.update_idletasks()
+            self.update()
 
-
+        time.sleep(0.1)
+        self.gridMaze[self.endCords[0]][self.endCords[1]].configure(background=PATH_COL)
         self.endCords = None
 
     def renderPosiblePath(self, path):
@@ -281,26 +333,31 @@ class Maze(tk.Frame):
         else:
             pass
 
-        time.sleep(0.01)
+        time.sleep(0.005)
         self.update()
 
     def bfs(self):
+        self.clearPath()
         paths = queue.Queue()
         path = []
         paths.put(path)
         while(True):
+            if paths.empty():
+                messagebox.showinfo("", "This maze has no solution")
+                return
+
             path = paths.get()
 
-            if(self.isSolutionPath(path)):
-                return path
-
-            for direction in [UP, RIGHT, DOWN, LEFT]:
+            for direction in [UP, DOWN, RIGHT, LEFT]:
                 new_path = [step for step in path]
                 new_path.append(direction)
                 if self.isValidPath(new_path):
                     paths.put(new_path)
                     self.renderPosiblePath(new_path)
-            # time.sleep(0.01)
+                    if(self.isSolutionPath(new_path)):
+                        self.renderPath(new_path)
+                        return
+                
 
 class SettingsMenu(tk.Toplevel):
     def __init__(self, parent, controller:tk.Tk):
@@ -403,7 +460,7 @@ class SandboxPage(tk.Frame):
         label = ttk.Label(mazeGenerationmenu, text="Maze Generation", style="menuBar.TLabel")
         label.grid(column=0, row=0, sticky="W", pady=(0,5))
 
-        generation_algos = ["Select An Algorithm", "Random",] # "Recursive Backtracking"
+        generation_algos = ["Select An Algorithm", "Random", "Recursive Backtracking"] # 
 
         cbmazegen = ttk.Combobox(mazeGenerationmenu, values=generation_algos, state="readonly")
         cbmazegen.grid(column=0, row=1, pady=(0,10))
@@ -534,7 +591,7 @@ class SandboxPage(tk.Frame):
         if selection == "Random":
             self.maze.randomGeneration()
         elif selection == "Recursive Backtracking":
-            self.recursiveBacktrackingGeneration()
+            self.maze.recursiveBacktrackingGeneration()
         else:
             pass
 
@@ -552,8 +609,20 @@ class SandboxPage(tk.Frame):
             return
 
     def findPath(self):
-        selection = self.cbmazefin.get()
+        #check that maze is valid
+        isValidMaze = True
+        errors = ""
+        if self.maze.startCords == None:
+            isValidMaze = False
+            errors += "A maze should have a Starting Point\n"
+        if self.maze.endCords == None:
+            isValidMaze = False
+            errors += "A maze should have an End Point\n"
+        if not(isValidMaze):
+            messagebox.showwarning("Not valid", errors)
+            return
 
+        #if maze is valid, call maze solvers
+        selection = self.cbmazefin.get()
         if selection == "Breath First Search":
-            path = self.maze.bfs()
-            self.maze.renderPath(path)
+            self.maze.bfs()
